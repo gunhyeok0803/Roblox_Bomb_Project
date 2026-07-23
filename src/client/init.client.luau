@@ -1,0 +1,10 @@
+--!strict
+-- 클라이언트 부트스트랩: 컨트롤러 require (UI/이펙트/사운드/입력만 담당, 판정 없음)
+local Controllers = script:WaitForChild("Controllers")
+local Network = require(Controllers.NetworkController)
+Network.init()
+require(Controllers.UIManager).init(Network)
+require(Controllers.EffectController).init(Network)
+require(Controllers.SoundController).init(Network)
+require(Controllers.InputController).init(Network)
+print("[BombGameClient] 기동 완료")

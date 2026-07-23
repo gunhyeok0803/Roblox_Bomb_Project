@@ -1,0 +1,17 @@
+# Rojo / Roblox
+*.rbxl
+*.rbxlx
+*.rbxl.lock
+*.rbxlx.lock
+*.rbxm
+*.rbxmx
+
+# Wally packages (if you add Wally later)
+/Packages
+/ServerPackages
+/DevPackages
+
+# Editor
+.DS_Store
+.vscode/*
+!.vscode/settings.json
