@@ -7,9 +7,8 @@ local deps
 local roundAssign: { [number]: CFrame } = {}
 function SpawnManager.init(injected) deps = injected end
 
--- 스폰 CFrame 목록: 맵에 Workspace.SpawnPoints(BasePart들)이 있으면 우선, 없으면 Config placeholder
+-- 스폰 CFrame 목록: 맵의 Workspace.SpawnPoints(BasePart) 우선, 없으면 SpawnConfig(중심 바라봄)
 local function getSpawnCFrames(): { CFrame }
-	local out = {}
 	local folder = workspace:FindFirstChild("SpawnPoints")
 	if folder then
 		local parts = {}
@@ -17,15 +16,29 @@ local function getSpawnCFrames(): { CFrame }
 			if c:IsA("BasePart") then table.insert(parts, c) end
 		end
 		table.sort(parts, function(a, b) return a.Name < b.Name end)
-		for _, p in ipairs(parts) do table.insert(out, p.CFrame) end
+		if #parts > 0 then
+			local out = {}
+			for _, p in ipairs(parts) do table.insert(out, p.CFrame) end
+			return out
+		end
 	end
-	if #out == 0 then
-		for _, v in ipairs(SpawnConfig.Points) do table.insert(out, CFrame.new(v)) end
+	local pts = SpawnConfig.Points
+	local center = Vector3.zero
+	for _, v in ipairs(pts) do center += v end
+	center /= #pts
+	local out = {}
+	for _, v in ipairs(pts) do
+		local look = Vector3.new(center.X, v.Y, center.Z)
+		if (look - v).Magnitude < 0.1 then
+			table.insert(out, CFrame.new(v))
+		else
+			table.insert(out, CFrame.lookAt(v, look))
+		end
 	end
 	return out
 end
 
--- 라운드 시작 시 플레이어→스폰 셔플 배정
+-- 라운드 시작 시 플레이어→스폰 셔플 배정 (각자 다른 위치)
 function SpawnManager.assignRound(players: { Player })
 	roundAssign = {}
 	local cframes = getSpawnCFrames()
