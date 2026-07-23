@@ -1,5 +1,4 @@
 --!strict
--- UI 데이터 바인딩 전담. 레이아웃/스타일은 템플릿(ReplicatedStorage.Shared.Assets.BombGameUI)에 있음.
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
@@ -11,10 +10,8 @@ local RemoteNames = require(ReplicatedStorage.Shared.Constants.RemoteNames)
 
 local UIManager = {}
 local BUFF_KEY_HINT = { blink = "  [Q]", repel = "  [E]", reflect = "  (자동)" }
--- 점수 팝업 문구
 local REASON_LABEL = {
-	survive = "생존", pass = "전달", clutch = "클러치!", lastSecond = "막판!",
-	buff = "버프", longThrow = "원거리", lastSurvivor = "최후 생존", streak = "연속 전달!",
+	survive = "생존", pass = "전달", clutch = "클러치!", buff = "버프", longThrow = "원거리", streak = "연속 전달!",
 }
 
 function UIManager.init(network)
@@ -41,13 +38,18 @@ function UIManager.init(network)
 	local startButton = lobbyBanner:FindFirstChild("StartButton")
 	local readyButton = lobbyBanner:FindFirstChild("ReadyButton")
 	local scorePopupTemplate = gui:FindFirstChild("ScorePopupTemplate")
+	-- QA 요소
+	local roundIntro = gui:FindFirstChild("RoundIntro")
+	local passPopup = gui:FindFirstChild("PassPopup")
+	local flash = gui:FindFirstChild("Flash")
+	local vignette = gui:FindFirstChild("DangerVignette")
+	local playAgain = gamePanel:FindFirstChild("PlayAgainButton")
+	local leaveBtn = gamePanel:FindFirstChild("LeaveButton")
 
-	if startButton then
-		startButton.Activated:Connect(function() network.send(RemoteNames.RequestStartGame) end)
-	end
-	if readyButton then
-		readyButton.Activated:Connect(function() network.send(RemoteNames.RequestToggleReady) end)
-	end
+	if startButton then startButton.Activated:Connect(function() network.send(RemoteNames.RequestStartGame) end) end
+	if readyButton then readyButton.Activated:Connect(function() network.send(RemoteNames.RequestToggleReady) end) end
+	if playAgain then playAgain.Activated:Connect(function() gamePanel.Visible = false end) end
+	if leaveBtn then leaveBtn.Activated:Connect(function() gamePanel.Visible = false end) end
 
 	local function nameOf(userId: number): string
 		local p = Players:GetPlayerByUserId(userId)
@@ -69,11 +71,30 @@ function UIManager.init(network)
 		chip.Parent = buffContainer
 	end
 
-	network.on("GameStateChanged", function(stateName)
+	-- QA-02 라운드 인트로
+	local function showRoundIntro(round)
+		if not roundIntro then return end
+		roundIntro.Text = "ROUND " .. tostring(round or "")
+		roundIntro.Visible = true; roundIntro.TextTransparency = 0
+		roundIntro.Size = UDim2.fromOffset(400, 90)
+		TweenService:Create(roundIntro, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+			{ Size = UDim2.fromOffset(620, 90) }):Play()
+		task.delay(1.1, function()
+			TweenService:Create(roundIntro, TweenInfo.new(0.4), { TextTransparency = 1 }):Play()
+			task.delay(0.45, function() roundIntro.Visible = false end)
+		end)
+	end
+
+	network.on("GameStateChanged", function(stateName, payload)
 		lobbyBanner.Visible = (stateName == StateConstants.LOBBY or stateName == StateConstants.WAITING)
+		if stateName == StateConstants.ROUND_START then
+			clearBuffChips()          -- 버프 지급(BuffGranted) 전에 초기화 (버그 수정)
+			specBanner.Visible = false
+			roundPanel.Visible = false
+			showRoundIntro(payload and payload.round)
+		end
 	end)
 
-	-- 로비: 호스트=시작버튼 / 비호스트=Ready버튼, 전원 Ready 시 카운트다운
 	network.on("LobbyUpdate", function(data)
 		if not data then return end
 		lobbyBanner.Visible = true
@@ -81,19 +102,14 @@ function UIManager.init(network)
 		local isHost = (data.hostUserId == me)
 		local myReady, readyCount, nonHost = false, 0, 0
 		for _, e in ipairs(data.players or {}) do
-			if not e.isHost then
-				nonHost += 1
-				if e.ready then readyCount += 1 end
-			end
+			if not e.isHost then nonHost += 1; if e.ready then readyCount += 1 end end
 			if e.userId == me then myReady = e.ready end
 		end
-
 		if data.countingDown then
 			lobbyText.Text = string.format("곧 시작!  %d", data.secondsLeft or 0)
 		else
 			lobbyText.Text = string.format("대기 중  %d / %d  ·  준비 %d / %d", data.count or 0, data.max or 6, readyCount, nonHost)
 		end
-
 		if startButton then
 			startButton.Visible = isHost
 			startButton.Active = (data.allReady == true)
@@ -108,13 +124,11 @@ function UIManager.init(network)
 		end
 	end)
 
+	-- 라운드 정보 (버프 칩은 여기서 지우지 않음 — 버그 수정)
 	network.on("RoundInfoUpdate", function(data)
 		if not data then return end
 		roundLabel.Text = string.format("라운드 %d / %d", data.round or 0, data.totalRounds or 0)
 		aliveLabel.Text = "생존 " .. tostring(data.alive or 0)
-		clearBuffChips()
-		specBanner.Visible = false
-		roundPanel.Visible = false
 	end)
 
 	network.on("TimerUpdate", function(data)
@@ -123,6 +137,23 @@ function UIManager.init(network)
 		timerLabel.Text = string.format("%d:%02d", math.floor(sec / 60), sec % 60)
 		local d = math.clamp(data.dangerLevel or 0, 0, 1)
 		timerLabel.TextColor3 = UIConfig.SAFE_COLOR:Lerp(UIConfig.DANGER_COLOR, d)
+		-- QA-03 위험 가장자리
+		if vignette then
+			local t = math.floor(120 * d)
+			for _, f in ipairs(vignette:GetChildren()) do
+				if f:IsA("Frame") then
+					if f.Name == "Top" or f.Name == "Bottom" then f.Size = UDim2.new(1, 0, 0, t)
+					else f.Size = UDim2.new(0, t, 1, 0) end
+				end
+			end
+		end
+		-- QA-03 타이머 펄스
+		if d > 0 then
+			local pulse = 1 + 0.14 * d * (0.5 + 0.5 * math.sin(os.clock() * (4 + d * 9)))
+			timerLabel.TextSize = math.floor(30 * pulse)
+		else
+			timerLabel.TextSize = 30
+		end
 	end)
 
 	network.on("BombOwnerChanged", function(ownerUserId)
@@ -145,23 +176,38 @@ function UIManager.init(network)
 		if userId == player.UserId then specBanner.Visible = true end
 	end)
 
-	-- 점수 획득 플로팅 토스트 (+15 전달 …)
 	network.on("ScorePopup", function(data)
 		if not data or not scorePopupTemplate then return end
 		local label = scorePopupTemplate:Clone()
-		label.Name = "ScorePopup"
-		label.Visible = true
+		label.Name = "ScorePopup"; label.Visible = true
 		label.Text = string.format("+%d  %s", data.points or 0, REASON_LABEL[data.reason] or "")
 		local xOff = math.random(-70, 70)
 		label.Position = UDim2.new(0.5, xOff, 0.62, 0)
-		label.TextTransparency = 0
-		label.TextStrokeTransparency = 0.4
+		label.TextTransparency = 0; label.TextStrokeTransparency = 0.4
 		label.Parent = gui
-		local up = UDim2.new(0.5, xOff, 0.5, 0)
 		TweenService:Create(label, TweenInfo.new(0.9, Enum.EasingStyle.Quad), {
-			Position = up, TextTransparency = 1, TextStrokeTransparency = 1,
+			Position = UDim2.new(0.5, xOff, 0.5, 0), TextTransparency = 1, TextStrokeTransparency = 1,
 		}):Play()
 		Debris:AddItem(label, 1.0)
+	end)
+
+	network.on("EffectTrigger", function(effectId, params)
+		params = params or {}
+		if effectId == "bombThrow" and params.from == player.UserId and passPopup then
+			-- QA-06 던진 사람 PASS!
+			passPopup.Visible = true; passPopup.TextTransparency = 0
+			passPopup.Size = UDim2.fromOffset(320, 80)
+			TweenService:Create(passPopup, TweenInfo.new(0.25, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+				{ Size = UDim2.fromOffset(520, 80) }):Play()
+			task.delay(0.5, function()
+				TweenService:Create(passPopup, TweenInfo.new(0.3), { TextTransparency = 1 }):Play()
+				task.delay(0.3, function() passPopup.Visible = false end)
+			end)
+		elseif effectId == "explosion" and flash then
+			-- QA-04 화면 플래시
+			flash.BackgroundTransparency = 0.2
+			TweenService:Create(flash, TweenInfo.new(0.35), { BackgroundTransparency = 1 }):Play()
+		end
 	end)
 
 	network.on("RoundResult", function(data)
@@ -178,12 +224,13 @@ function UIManager.init(network)
 		task.delay(3, function() roundPanel.Visible = false end)
 	end)
 
+	-- QA-05 최종 결과 (버튼으로 닫음, 등장 연출)
 	network.on("MatchResult", function(data)
 		if not data then return end
 		local medals = { "🥇", "🥈", "🥉" }
 		local lines = {}
 		if data.mvpName then
-			table.insert(lines, "🏆 MVP  " .. data.mvpName .. "   " .. (data.mvpTitle or ""))
+			table.insert(lines, "🏆 승자  " .. data.mvpName .. "   " .. (data.mvpTitle or ""))
 			table.insert(lines, "")
 		end
 		for i, e in ipairs(data.ranking or {}) do
@@ -196,8 +243,12 @@ function UIManager.init(network)
 			table.insert(lines, string.format("보상  💰 +%d   ✨ +%d   (Lv.%d)", myReward.coins, myReward.xp, myReward.level))
 		end
 		gamePanel.RankingText.Text = table.concat(lines, "\n")
+		-- 등장 연출
 		gamePanel.Visible = true
-		task.delay(8, function() gamePanel.Visible = false end)
+		gamePanel.Size = UDim2.fromOffset(400, 330)
+		TweenService:Create(gamePanel, TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+			{ Size = UDim2.fromOffset(440, 360) }):Play()
+		-- 자동 숨김 없음 — 버튼으로 닫음
 	end)
 end
 return UIManager
