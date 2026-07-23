@@ -31,8 +31,9 @@ local deps = {
 	game        = GameManager,
 }
 
-DataManager.init(deps)
+-- PlayerManager 를 먼저 init (leaderstats 선생성) → DataManager 가 코인 값 반영 가능
 PlayerManager.init(deps)
+DataManager.init(deps)
 StatsManager.init(deps)
 ScoreManager.init(deps)
 BuffManager.init(deps)

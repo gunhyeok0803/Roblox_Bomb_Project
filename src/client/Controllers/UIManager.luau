@@ -2,6 +2,8 @@
 -- UI 데이터 바인딩 전담. 레이아웃/스타일은 템플릿(ReplicatedStorage.Shared.Assets.BombGameUI)에 있음.
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService = game:GetService("TweenService")
+local Debris = game:GetService("Debris")
 
 local UIConfig = require(ReplicatedStorage.Shared.Config.UIConfig)
 local StateConstants = require(ReplicatedStorage.Shared.Constants.StateConstants)
@@ -9,6 +11,11 @@ local RemoteNames = require(ReplicatedStorage.Shared.Constants.RemoteNames)
 
 local UIManager = {}
 local BUFF_KEY_HINT = { blink = "  [Q]", repel = "  [E]", reflect = "  (자동)" }
+-- 점수 팝업 문구
+local REASON_LABEL = {
+	survive = "생존", pass = "전달", clutch = "클러치!", lastSecond = "막판!",
+	buff = "버프", longThrow = "원거리", lastSurvivor = "최후 생존", streak = "연속 전달!",
+}
 
 function UIManager.init(network)
 	local player = Players.LocalPlayer
@@ -33,6 +40,7 @@ function UIManager.init(network)
 	local lobbyText = lobbyBanner.LobbyText
 	local startButton = lobbyBanner:FindFirstChild("StartButton")
 	local readyButton = lobbyBanner:FindFirstChild("ReadyButton")
+	local scorePopupTemplate = gui:FindFirstChild("ScorePopupTemplate")
 
 	if startButton then
 		startButton.Activated:Connect(function() network.send(RemoteNames.RequestStartGame) end)
@@ -135,6 +143,25 @@ function UIManager.init(network)
 
 	network.on("PlayerEliminated", function(userId)
 		if userId == player.UserId then specBanner.Visible = true end
+	end)
+
+	-- 점수 획득 플로팅 토스트 (+15 전달 …)
+	network.on("ScorePopup", function(data)
+		if not data or not scorePopupTemplate then return end
+		local label = scorePopupTemplate:Clone()
+		label.Name = "ScorePopup"
+		label.Visible = true
+		label.Text = string.format("+%d  %s", data.points or 0, REASON_LABEL[data.reason] or "")
+		local xOff = math.random(-70, 70)
+		label.Position = UDim2.new(0.5, xOff, 0.62, 0)
+		label.TextTransparency = 0
+		label.TextStrokeTransparency = 0.4
+		label.Parent = gui
+		local up = UDim2.new(0.5, xOff, 0.5, 0)
+		TweenService:Create(label, TweenInfo.new(0.9, Enum.EasingStyle.Quad), {
+			Position = up, TextTransparency = 1, TextStrokeTransparency = 1,
+		}):Play()
+		Debris:AddItem(label, 1.0)
 	end)
 
 	network.on("RoundResult", function(data)

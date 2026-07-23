@@ -21,6 +21,7 @@ function DataManager._sync(player: Player)
 	local p = profiles[player.UserId]
 	if p and deps then
 		deps.network.fireTo("CurrencyUpdate", player, { coins = p.coins, xp = p.xp, level = p.level })
+		if deps.players then deps.players.setStat(player.UserId, "코인", p.coins) end
 	end
 end
 

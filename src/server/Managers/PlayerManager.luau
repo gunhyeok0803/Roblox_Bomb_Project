@@ -7,11 +7,24 @@ local deps
 local states: { [number]: any } = {}
 local joinCounter = 0
 
+local function ensureLeaderstats(p: Player)
+	local ls = p:FindFirstChild("leaderstats")
+	if not ls then
+		ls = Instance.new("Folder"); ls.Name = "leaderstats"; ls.Parent = p
+	end
+	for _, name in ipairs({ "점수", "코인" }) do
+		if not ls:FindFirstChild(name) then
+			local v = Instance.new("IntValue"); v.Name = name; v.Parent = ls
+		end
+	end
+end
+
 local function ensure(p: Player)
 	if not states[p.UserId] then
 		joinCounter += 1
 		states[p.UserId] = { player = p, alive = true, score = 0, activeBuffs = {}, joinOrder = joinCounter }
 	end
+	ensureLeaderstats(p)
 end
 
 function PlayerManager.init(injected)
@@ -21,12 +34,20 @@ function PlayerManager.init(injected)
 	Players.PlayerRemoving:Connect(function(p) states[p.UserId] = nil end)
 end
 
+-- 실시간 leaderstats 값 갱신
+function PlayerManager.setStat(userId: number, statName: string, value: number)
+	local s = states[userId]
+	if not s or not s.player then return end
+	local ls = s.player:FindFirstChild("leaderstats")
+	local v = ls and ls:FindFirstChild(statName)
+	if v then v.Value = value end
+end
+
 function PlayerManager.getAll(): { Player }
 	local t = {}
 	for _, s in states do table.insert(t, s.player) end
 	return t
 end
--- 첫 입장자(호스트) 반환
 function PlayerManager.getHost(): Player?
 	local best
 	for _, s in states do
