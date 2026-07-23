@@ -5,9 +5,9 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local UIConfig = require(ReplicatedStorage.Shared.Config.UIConfig)
 local StateConstants = require(ReplicatedStorage.Shared.Constants.StateConstants)
+local RemoteNames = require(ReplicatedStorage.Shared.Constants.RemoteNames)
 
 local UIManager = {}
-
 local BUFF_KEY_HINT = { blink = "  [Q]", repel = "  [E]", reflect = "  (자동)" }
 
 function UIManager.init(network)
@@ -30,6 +30,16 @@ function UIManager.init(network)
 	local gamePanel = gui.GameResultPanel
 	local specBanner = gui.SpectatorBanner
 	local lobbyBanner = gui.LobbyBanner
+	local lobbyText = lobbyBanner.LobbyText
+	local startButton = lobbyBanner:FindFirstChild("StartButton")
+	local readyButton = lobbyBanner:FindFirstChild("ReadyButton")
+
+	if startButton then
+		startButton.Activated:Connect(function() network.send(RemoteNames.RequestStartGame) end)
+	end
+	if readyButton then
+		readyButton.Activated:Connect(function() network.send(RemoteNames.RequestToggleReady) end)
+	end
 
 	local function nameOf(userId: number): string
 		local p = Players:GetPlayerByUserId(userId)
@@ -53,6 +63,41 @@ function UIManager.init(network)
 
 	network.on("GameStateChanged", function(stateName)
 		lobbyBanner.Visible = (stateName == StateConstants.LOBBY or stateName == StateConstants.WAITING)
+	end)
+
+	-- 로비: 호스트=시작버튼 / 비호스트=Ready버튼, 전원 Ready 시 카운트다운
+	network.on("LobbyUpdate", function(data)
+		if not data then return end
+		lobbyBanner.Visible = true
+		local me = player.UserId
+		local isHost = (data.hostUserId == me)
+		local myReady, readyCount, nonHost = false, 0, 0
+		for _, e in ipairs(data.players or {}) do
+			if not e.isHost then
+				nonHost += 1
+				if e.ready then readyCount += 1 end
+			end
+			if e.userId == me then myReady = e.ready end
+		end
+
+		if data.countingDown then
+			lobbyText.Text = string.format("곧 시작!  %d", data.secondsLeft or 0)
+		else
+			lobbyText.Text = string.format("대기 중  %d / %d  ·  준비 %d / %d", data.count or 0, data.min or 2, readyCount, nonHost)
+		end
+
+		if startButton then
+			startButton.Visible = isHost
+			startButton.Active = (data.allReady == true)
+			startButton.AutoButtonColor = (data.allReady == true)
+			startButton.BackgroundColor3 = data.allReady and Color3.fromRGB(90, 200, 120) or Color3.fromRGB(110, 115, 125)
+			startButton.Text = data.allReady and "게임 시작" or "다른 플레이어 준비 대기"
+		end
+		if readyButton then
+			readyButton.Visible = not isHost
+			readyButton.Text = myReady and "준비 취소" or "준비 완료"
+			readyButton.BackgroundColor3 = myReady and Color3.fromRGB(90, 200, 120) or Color3.fromRGB(90, 160, 240)
+		end
 	end)
 
 	network.on("RoundInfoUpdate", function(data)
@@ -106,7 +151,6 @@ function UIManager.init(network)
 		task.delay(3, function() roundPanel.Visible = false end)
 	end)
 
-	-- 매치 종료: 순위 + MVP + 내 보상
 	network.on("MatchResult", function(data)
 		if not data then return end
 		local medals = { "🥇", "🥈", "🥉" }

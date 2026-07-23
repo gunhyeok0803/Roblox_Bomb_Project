@@ -4,11 +4,13 @@ local GameConfig = require(game:GetService("ReplicatedStorage").Shared.Config.Ga
 
 local PlayerManager = {}
 local deps
-local states: { [number]: { player: Player, alive: boolean, score: number, activeBuffs: { string } } } = {}
+local states: { [number]: any } = {}
+local joinCounter = 0
 
 local function ensure(p: Player)
 	if not states[p.UserId] then
-		states[p.UserId] = { player = p, alive = true, score = 0, activeBuffs = {} }
+		joinCounter += 1
+		states[p.UserId] = { player = p, alive = true, score = 0, activeBuffs = {}, joinOrder = joinCounter }
 	end
 end
 
@@ -24,6 +26,14 @@ function PlayerManager.getAll(): { Player }
 	for _, s in states do table.insert(t, s.player) end
 	return t
 end
+-- 첫 입장자(호스트) 반환
+function PlayerManager.getHost(): Player?
+	local best
+	for _, s in states do
+		if not best or s.joinOrder < best.joinOrder then best = s end
+	end
+	return best and best.player
+end
 function PlayerManager.getAlivePlayers(): { Player }
 	local t = {}
 	for _, s in states do if s.alive then table.insert(t, s.player) end end
@@ -35,10 +45,7 @@ function PlayerManager.isAlive(p: Player): boolean
 end
 function PlayerManager.eliminate(userId: number, round: number?)
 	local s = states[userId]
-	if s then
-		s.alive = false
-		deps.network.broadcast("PlayerEliminated", userId, round)
-	end
+	if s then s.alive = false; deps.network.broadcast("PlayerEliminated", userId, round) end
 end
 function PlayerManager.respawnAll()
 	for _, s in states do
@@ -47,13 +54,9 @@ function PlayerManager.respawnAll()
 		if s.player then s.player:LoadCharacter() end
 	end
 end
-function PlayerManager.resetScores()
-	for _, s in states do s.score = 0 end
-end
+function PlayerManager.resetScores() for _, s in states do s.score = 0 end end
 function PlayerManager.awardSurvivors(round: number)
-	for _, s in states do
-		if s.alive then s.score += GameConfig.SCORE_PER_SURVIVAL end
-	end
+	for _, s in states do if s.alive then s.score += GameConfig.SCORE_PER_SURVIVAL end end
 end
 function PlayerManager.getRoundSummary(round: number)
 	local scores = {}

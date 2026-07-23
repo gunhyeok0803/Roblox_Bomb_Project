@@ -1,5 +1,4 @@
 --!strict
--- 폭탄 게임 서버 부트스트랩: 매니저 require + 의존성 주입 + 기동
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Managers = script:WaitForChild("Managers")
 
@@ -9,6 +8,7 @@ local PlayerManager      = require(Managers.PlayerManager)
 local StatsManager       = require(Managers.StatsManager)
 local ScoreManager       = require(Managers.ScoreManager)
 local BuffManager        = require(Managers.BuffManager)
+local SpawnManager       = require(Managers.SpawnManager)
 local BombManager        = require(Managers.BombManager)
 local ProgressionManager = require(Managers.ProgressionManager)
 local StateManager       = require(Managers.StateManager)
@@ -24,9 +24,11 @@ local deps = {
 	stats       = StatsManager,
 	score       = ScoreManager,
 	buffs       = BuffManager,
+	spawn       = SpawnManager,
 	bomb        = BombManager,
 	progression = ProgressionManager,
 	state       = StateManager,
+	game        = GameManager,
 }
 
 DataManager.init(deps)
@@ -34,6 +36,7 @@ PlayerManager.init(deps)
 StatsManager.init(deps)
 ScoreManager.init(deps)
 BuffManager.init(deps)
+SpawnManager.init(deps)
 BombManager.init(deps)
 ProgressionManager.init(deps)
 StateManager.init(deps)
@@ -45,6 +48,12 @@ NetworkManager.onServerEvent("RequestThrowBomb", function(player, aimDir)
 end)
 NetworkManager.onServerEvent("RequestUseBuff", function(player, buffId)
 	BuffManager.useActiveBuff(player, buffId)
+end)
+NetworkManager.onServerEvent("RequestStartGame", function(player)
+	GameManager.requestStart(player)
+end)
+NetworkManager.onServerEvent("RequestToggleReady", function(player)
+	GameManager.toggleReady(player)
 end)
 
 print("[BombGameServer] 기동 완료")

@@ -2,6 +2,8 @@
 local RemoteNames = {
 	RequestThrowBomb = "RequestThrowBomb",
 	RequestUseBuff = "RequestUseBuff",
+	RequestStartGame = "RequestStartGame",
+	RequestToggleReady = "RequestToggleReady",
 	GameStateChanged = "GameStateChanged",
 	RoundInfoUpdate = "RoundInfoUpdate",
 	TimerUpdate = "TimerUpdate",
@@ -12,10 +14,10 @@ local RemoteNames = {
 	GameResult = "GameResult",
 	EffectTrigger = "EffectTrigger",
 	GetSnapshot = "GetSnapshot",
-	-- 메타 시스템
 	MatchResult = "MatchResult",
 	ScorePopup = "ScorePopup",
 	CurrencyUpdate = "CurrencyUpdate",
+	LobbyUpdate = "LobbyUpdate",
 }
 table.freeze(RemoteNames)
 return RemoteNames
