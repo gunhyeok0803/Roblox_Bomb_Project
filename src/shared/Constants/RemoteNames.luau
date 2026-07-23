@@ -12,6 +12,10 @@ local RemoteNames = {
 	GameResult = "GameResult",
 	EffectTrigger = "EffectTrigger",
 	GetSnapshot = "GetSnapshot",
+	-- 메타 시스템
+	MatchResult = "MatchResult",
+	ScorePopup = "ScorePopup",
+	CurrencyUpdate = "CurrencyUpdate",
 }
 table.freeze(RemoteNames)
 return RemoteNames

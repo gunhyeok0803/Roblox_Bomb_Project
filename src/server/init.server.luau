@@ -3,32 +3,43 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Managers = script:WaitForChild("Managers")
 
-local NetworkManager = require(Managers.NetworkManager)
-local PlayerManager  = require(Managers.PlayerManager)
-local BuffManager    = require(Managers.BuffManager)
-local BombManager    = require(Managers.BombManager)
-local StateManager   = require(Managers.StateManager)
-local RoundManager   = require(Managers.RoundManager)
-local GameManager    = require(Managers.GameManager)
+local NetworkManager     = require(Managers.NetworkManager)
+local DataManager        = require(Managers.DataManager)
+local PlayerManager      = require(Managers.PlayerManager)
+local StatsManager       = require(Managers.StatsManager)
+local ScoreManager       = require(Managers.ScoreManager)
+local BuffManager        = require(Managers.BuffManager)
+local BombManager        = require(Managers.BombManager)
+local ProgressionManager = require(Managers.ProgressionManager)
+local StateManager       = require(Managers.StateManager)
+local RoundManager       = require(Managers.RoundManager)
+local GameManager        = require(Managers.GameManager)
 
 NetworkManager.init()
 
 local deps = {
-	network = NetworkManager,
-	players = PlayerManager,
-	buffs   = BuffManager,
-	bomb    = BombManager,
-	state   = StateManager,
+	network     = NetworkManager,
+	data        = DataManager,
+	players     = PlayerManager,
+	stats       = StatsManager,
+	score       = ScoreManager,
+	buffs       = BuffManager,
+	bomb        = BombManager,
+	progression = ProgressionManager,
+	state       = StateManager,
 }
 
+DataManager.init(deps)
 PlayerManager.init(deps)
+StatsManager.init(deps)
+ScoreManager.init(deps)
 BuffManager.init(deps)
 BombManager.init(deps)
+ProgressionManager.init(deps)
 StateManager.init(deps)
 RoundManager.init(deps)
 GameManager.init(deps)
 
--- 클라 -> 서버 요청 배선 (서버 권한 판정)
 NetworkManager.onServerEvent("RequestThrowBomb", function(player, aimDir)
 	BombManager.onThrowRequest(player, aimDir)
 end)

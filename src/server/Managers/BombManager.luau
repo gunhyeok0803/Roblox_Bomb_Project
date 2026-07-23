@@ -5,15 +5,15 @@ local Players = game:GetService("Players")
 
 local BombConfig = require(ReplicatedStorage.Shared.Config.BombConfig)
 local GameConstants = require(ReplicatedStorage.Shared.Constants.GameConstants)
+local ScoreConfig = require(ReplicatedStorage.Shared.Config.ScoreConfig)
 local RandomService = require(script.Parent.RandomService)
 
 local BombManager = {}
-local bombState = { ownerUserId = nil :: number?, explodeAt = nil :: number?, lastThrowAt = 0 }
+local bombState = { ownerUserId = nil :: number?, explodeAt = nil :: number?, lastThrowAt = 0, ownerSince = 0, danger = 0 }
 local bombInstance: Model? = nil
 local deps
 function BombManager.init(injected) deps = injected end
 
--- ===== 폭탄 실물(Model) 관리 =====
 local function ensureBomb(): Model
 	if bombInstance and bombInstance.Parent then return bombInstance end
 	local template = ServerStorage:WaitForChild("BombTemplate")
@@ -22,39 +22,24 @@ local function ensureBomb(): Model
 	bombInstance.Parent = workspace
 	return bombInstance
 end
-
 local function detachBomb()
-	if bombInstance then
-		bombInstance:Destroy()
-		bombInstance = nil
-	end
+	if bombInstance then bombInstance:Destroy(); bombInstance = nil end
 end
-
--- 소유자 캐릭터 머리 위에 폭탄 용접
 local function attachToOwner(userId: number)
 	local player = Players:GetPlayerByUserId(userId)
 	local char = player and player.Character
 	local head = char and char:FindFirstChild("Head") :: BasePart?
 	if not head then return end
-
 	local bomb = ensureBomb()
 	local bodyPart = bomb.PrimaryPart
 	if not bodyPart then return end
-
-	-- 기존 소유자 용접 제거
 	local oldWeld = bodyPart:FindFirstChild("OwnerWeld")
 	if oldWeld then oldWeld:Destroy() end
-
-	-- 머리 위로 이동 후 용접
 	bodyPart.CFrame = head.CFrame * CFrame.new(BombConfig.ATTACH_OFFSET)
 	local weld = Instance.new("WeldConstraint")
-	weld.Name = "OwnerWeld"
-	weld.Part0 = bodyPart
-	weld.Part1 = head
-	weld.Parent = bodyPart
+	weld.Name = "OwnerWeld"; weld.Part0 = bodyPart; weld.Part1 = head; weld.Parent = bodyPart
 end
 
--- ===== 폭탄 상태 로직 =====
 function BombManager.arm(roundStartClock: number)
 	local extra = RandomService:number(0, GameConstants.ROUND_TIME - GameConstants.BOMB_SAFE_TIME)
 	bombState.explodeAt = roundStartClock + GameConstants.BOMB_SAFE_TIME + extra
@@ -65,9 +50,16 @@ function BombManager.assignInitialOwner(alivePlayers: { Player })
 end
 function BombManager.getOwnerUserId(): number? return bombState.ownerUserId end
 function BombManager.getExplodeAt(): number? return bombState.explodeAt end
+function BombManager.updateDanger(d: number) bombState.danger = d end
 
 function BombManager._setOwner(newUserId: number?, previousUserId: number?)
+	local now = os.clock()
+	-- 이전 소유자 보유 시간 누적
+	if previousUserId and bombState.ownerSince > 0 and deps.stats then
+		deps.stats.add(previousUserId, "totalHoldTime", now - bombState.ownerSince)
+	end
 	bombState.ownerUserId = newUserId
+	bombState.ownerSince = now
 	if newUserId then attachToOwner(newUserId) end
 	deps.network.broadcast("BombOwnerChanged", newUserId, previousUserId)
 end
@@ -76,8 +68,7 @@ function BombManager._blocked(origin: Vector3, targetPos: Vector3, ignoreList: {
 	local params = RaycastParams.new()
 	params.FilterType = Enum.RaycastFilterType.Exclude
 	params.FilterDescendantsInstances = ignoreList
-	local res = workspace:Raycast(origin, targetPos - origin, params)
-	return res ~= nil
+	return workspace:Raycast(origin, targetPos - origin, params) ~= nil
 end
 
 function BombManager._findTarget(thrower: Player, origin: Vector3, dir: Vector3, range: number, hitRadiusMult: number): Player?
@@ -112,7 +103,6 @@ function BombManager.onThrowRequest(player: Player, aimDirection: Vector3)
 	if now - bombState.lastThrowAt < cooldown then return end
 	if typeof(aimDirection) ~= "Vector3" or aimDirection.Magnitude < 0.1 then return end
 	local dir = aimDirection.Unit
-
 	local character = player.Character
 	local root = character and character:FindFirstChild("HumanoidRootPart")
 	if not root then return end
@@ -125,6 +115,21 @@ function BombManager.onThrowRequest(player: Player, aimDirection: Vector3)
 			deps.network.broadcast("EffectTrigger", "reflect", { from = player.UserId, by = target.UserId })
 			return
 		end
+		-- ===== 점수 처리 =====
+		local targetRoot = target.Character and target.Character:FindFirstChild("HumanoidRootPart")
+		local dist = targetRoot and (targetRoot.Position - root.Position).Magnitude or 0
+		deps.score.award(player.UserId, "pass")
+		deps.stats.add(player.UserId, "passes", 1)
+		deps.score.bumpStreak(player.UserId)
+		if bombState.danger > 0 then deps.score.award(player.UserId, "clutch") end
+		local ea = bombState.explodeAt
+		if ea and (ea - now) <= ScoreConfig.LAST_SECOND_WINDOW then deps.score.award(player.UserId, "lastSecond") end
+		if dist >= ScoreConfig.LONG_THROW_DIST then
+			deps.score.award(player.UserId, "longThrow")
+			deps.stats.max(player.UserId, "farthestThrow", dist)
+		end
+		deps.score.resetStreak(target.UserId)
+
 		BombManager._setOwner(target.UserId, player.UserId)
 		deps.network.broadcast("EffectTrigger", "bombThrow", { from = player.UserId, to = target.UserId })
 		return
@@ -146,8 +151,16 @@ end
 
 function BombManager.explode(): number?
 	local victim = bombState.ownerUserId
+	if victim then
+		if deps.stats and bombState.ownerSince > 0 then
+			deps.stats.add(victim, "totalHoldTime", os.clock() - bombState.ownerSince)
+		end
+		if deps.stats then deps.stats.add(victim, "explodedCount", 1) end
+		if deps.score then deps.score.resetStreak(victim) end
+	end
 	bombState.explodeAt = nil
 	bombState.ownerUserId = nil
+	bombState.ownerSince = 0
 	detachBomb()
 	if victim then
 		deps.network.broadcast("EffectTrigger", "explosion", { userId = victim })

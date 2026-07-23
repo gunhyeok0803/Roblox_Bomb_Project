@@ -129,9 +129,11 @@ function BuffManager.useActiveBuff(player, buffId)
 			local dist = (def and def.params.dashStuds) or 8
 			root.CFrame = root.CFrame + root.CFrame.LookVector * dist
 			deps.network.broadcast("EffectTrigger", "blink", { userId = uid })
+			if deps.score then deps.score.award(uid, "buff") end
 		end
 	elseif buffId == "repel" and o.repel then
 		o.repel = false
+		if deps.score then deps.score.award(uid, "buff") end
 		deps.bomb.forcePassRandom(uid)
 	end
 end

@@ -33,6 +33,7 @@ function RoundManager.run(roundNumber: number): number?
 			danger = (elapsed - GameConstants.BOMB_SAFE_TIME)
 				/ (GameConstants.ROUND_TIME - GameConstants.BOMB_SAFE_TIME)
 		end
+		deps.bomb.updateDanger(danger)
 		deps.network.broadcast("TimerUpdate", {
 			phase = "playing", secondsLeft = math.floor(secondsLeft), dangerLevel = danger,
 		})
