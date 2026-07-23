@@ -122,8 +122,6 @@ function BombManager.onThrowRequest(player: Player, aimDirection: Vector3)
 		deps.stats.add(player.UserId, "passes", 1)
 		deps.score.bumpStreak(player.UserId)
 		if bombState.danger > 0 then deps.score.award(player.UserId, "clutch") end
-		local ea = bombState.explodeAt
-		if ea and (ea - now) <= ScoreConfig.LAST_SECOND_WINDOW then deps.score.award(player.UserId, "lastSecond") end
 		if dist >= ScoreConfig.LONG_THROW_DIST then
 			deps.score.award(player.UserId, "longThrow")
 			deps.stats.max(player.UserId, "farthestThrow", dist)

@@ -98,12 +98,10 @@ function GameManager.start()
 			StateManager.to(S.BOMB_EXPLODE, { victim = victimUserId })
 			if victimUserId then deps.players.eliminate(victimUserId, round) end
 
-			local survivors = deps.players.getAlivePlayers()
-			for _, p in survivors do
+			for _, p in deps.players.getAlivePlayers() do
 				deps.score.award(p.UserId, "survive")
 				deps.stats.add(p.UserId, "survivedRounds", 1)
 			end
-			if #survivors == 1 then deps.score.award(survivors[1].UserId, "lastSurvivor") end
 
 			StateManager.to(S.ROUND_RESULT, { round = round, scores = roundSummary() })
 			task.wait(GameConstants.RESULT_DISPLAY_TIME)

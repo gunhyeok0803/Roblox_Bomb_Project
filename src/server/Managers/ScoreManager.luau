@@ -9,8 +9,7 @@ local streak: { [number]: number } = {}
 
 local REASON = {
 	survive = "SURVIVE_ROUND", pass = "PASS", clutch = "CLUTCH_PASS",
-	lastSecond = "LAST_SECOND_PASS", buff = "BUFF_USE", longThrow = "LONG_THROW",
-	lastSurvivor = "LAST_SURVIVOR",
+	buff = "BUFF_USE", longThrow = "LONG_THROW",
 }
 
 function ScoreManager.init(injected) deps = injected end
