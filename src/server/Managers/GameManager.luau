@@ -62,7 +62,7 @@ function GameManager.start()
 			end
 
 			deps.network.broadcast("LobbyUpdate", {
-				hostUserId = hostUserId, min = GameConstants.MIN_PLAYERS, count = count,
+				hostUserId = hostUserId, min = GameConstants.MIN_PLAYERS, max = GameConstants.MAX_PLAYERS, count = count,
 				players = roster, allReady = allReady, countingDown = countingDown, secondsLeft = secondsLeft,
 			})
 

@@ -411,7 +411,6 @@ profiles[userId] = {
 | 동점 서든데스                  | ⬜      | `GameConfig.SUDDEN_DEATH_ON_TIE` 플래그만 존재      |
 | `GetSnapshot` 재접속 동기화    | ⬜      | Remote만 정의됨                                   |
 | TimerManager             | ⬜ 스텁   | 현재 각 매니저가 자체 타이밍. 미사용                         |
-| 관전자 카메라                  | ⬜      | 현재 탈락 시 배너만 표시                                |
 | ~~매치 점수제 / MVP / 보상~~    | ✅ 완료   | ScoreManager/ProgressionManager               |
 | ~~DataStore 영속 저장~~      | ✅ 완료   | DataManager (메모리 폴백 포함)                       |
 | ~~leaderstats / ScorePopup~~ | ✅ 완료 | 실시간 점수·코인 표시 + 점수 토스트                        |

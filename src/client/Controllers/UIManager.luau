@@ -91,7 +91,7 @@ function UIManager.init(network)
 		if data.countingDown then
 			lobbyText.Text = string.format("곧 시작!  %d", data.secondsLeft or 0)
 		else
-			lobbyText.Text = string.format("대기 중  %d / %d  ·  준비 %d / %d", data.count or 0, data.min or 2, readyCount, nonHost)
+			lobbyText.Text = string.format("대기 중  %d / %d  ·  준비 %d / %d", data.count or 0, data.max or 6, readyCount, nonHost)
 		end
 
 		if startButton then
