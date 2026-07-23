@@ -9,5 +9,6 @@ GameConstants.BOMB_SAFE_TIME = 60
 GameConstants.LOBBY_COUNTDOWN = 5
 GameConstants.RESULT_DISPLAY_TIME = 3
 GameConstants.INTERMISSION_TIME = 2
+GameConstants.BUFF_SELECT_TIME = 8
 table.freeze(GameConstants)
 return GameConstants

@@ -1,35 +1,33 @@
 --!strict
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players = game:GetService("Players")
 local BuffConfig = require(ReplicatedStorage.Shared.Config.BuffConfig)
 local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
+local GameConstants = require(ReplicatedStorage.Shared.Constants.GameConstants)
 local Util = require(ReplicatedStorage.Shared.Lib.Util)
 local RandomService = require(script.Parent.RandomService)
 
 local BuffManager = {}
 local deps
 
--- 기본 배수 (1.0 = 변화 없음)
 local function defaultMods()
-	return {
-		walkSpeedMult = 1, jumpMult = 1, rangeMult = 1,
-		hitRadiusMult = 1, targetRadiusMult = 1, cooldownMult = 1, homingStrength = 0,
-	}
+	return { walkSpeedMult=1, jumpMult=1, rangeMult=1, hitRadiusMult=1, targetRadiusMult=1, cooldownMult=1, homingStrength=0 }
 end
 
-local mods = {}       -- [userId] = mods 테이블
-local oneshots = {}   -- [userId] = { blink=n, reflect=bool, repel=bool }
-local grantedList = {} -- [userId] = { buffId, ... }
+local mods = {}
+local oneshots = {}
+local grantedList = {}
+-- 선택 상태
+local pending: { [number]: any } = {}
+local selected: { [number]: boolean } = {}
+local roster: { [number]: boolean } = {}
 
 function BuffManager.init(injected) deps = injected end
 
 local function getById(id)
-	for _, b in BuffConfig.List do
-		if b.id == id then return b end
-	end
+	for _, b in BuffConfig.List do if b.id == id then return b end end
 	return nil
 end
-
--- 캐릭터 이동 스탯 반영
 local function applyMovement(player)
 	local m = mods[player.UserId]
 	local char = player.Character
@@ -39,17 +37,13 @@ local function applyMovement(player)
 		hum.JumpPower = GameConfig.BASE_JUMP_POWER * m.jumpMult
 	end
 end
-
--- 버프 1개 적용
 local function applyBuff(player, def)
 	local uid = player.UserId
 	mods[uid] = mods[uid] or defaultMods()
 	oneshots[uid] = oneshots[uid] or {}
 	grantedList[uid] = grantedList[uid] or {}
 	table.insert(grantedList[uid], def.id)
-
-	local p = def.params
-	local m = mods[uid]
+	local p = def.params; local m = mods[uid]
 	if def.kind == "duration" or def.kind == "debuff" then
 		if p.walkSpeedMult then m.walkSpeedMult *= p.walkSpeedMult end
 		if p.jumpMult then m.jumpMult *= p.jumpMult end
@@ -70,56 +64,89 @@ end
 local function draw()
 	return Util.weightedPick(BuffConfig.List, function(b) return b.weight end, RandomService:raw())
 end
-
--- 라운드 시작 시 전체 초기화
-function BuffManager.resetRound()
-	table.clear(mods)
-	table.clear(oneshots)
-	table.clear(grantedList)
+local function drawNonMeta()
+	for _ = 1, 20 do local d = draw(); if d.kind ~= "meta" then return d end end
+	return getById("swift")
+end
+local function cardOf(def)
+	return { id = def.id, name = def.name, desc = def.desc, icon = def.icon, kind = def.kind }
 end
 
--- 생존 플레이어에게 라운드 버프 지급 (meta 처리 포함)
-function BuffManager.grantRoundBuffs(players, round)
+function BuffManager.resetRound()
+	table.clear(mods); table.clear(oneshots); table.clear(grantedList)
+	table.clear(pending); table.clear(selected); table.clear(roster)
+end
+
+-- 라운드 시작: 각 플레이어에게 카드 1장 오퍼 (선택 대기)
+function BuffManager.offerRoundBuffs(players, round)
 	BuffManager.resetRound()
-	for _, player in players do
+	for _, p in players do
+		roster[p.UserId] = true
+		selected[p.UserId] = false
 		local def = draw()
-		if def.id == "reroll" then
-			-- 재추첨: 한 번 다시 뽑음 (meta 중복 방지)
-			def = draw()
-			if def.kind == "meta" then def = getById("swift") end
-			applyBuff(player, def)
-		elseif def.id == "doubleDraw" then
-			-- 이중 획득: 2개 지급
-			local a, b = draw(), draw()
-			if a.kind ~= "meta" then applyBuff(player, a) end
-			if b.kind ~= "meta" then applyBuff(player, b) end
-		else
-			applyBuff(player, def)
+		pending[p.UserId] = def
+		deps.network.fireTo("BuffOffer", p, { cards = { cardOf(def) }, selectable = true, duration = GameConstants.BUFF_SELECT_TIME })
+	end
+end
+
+local function finish(player, cards)
+	selected[player.UserId] = true
+	deps.network.fireTo("BuffOffer", player, { cards = cards, selectable = false, done = true })
+end
+-- pending 을 최종 적용
+local function resolve(player)
+	local def = pending[player.UserId]
+	if not def then return end
+	if def.id == "reroll" then
+		local nd = drawNonMeta(); applyBuff(player, nd); finish(player, { cardOf(nd) })
+	elseif def.id == "doubleDraw" then
+		local a, b = drawNonMeta(), drawNonMeta()
+		applyBuff(player, a); applyBuff(player, b); finish(player, { cardOf(a), cardOf(b) })
+	else
+		applyBuff(player, def); finish(player, { cardOf(def) })
+	end
+end
+
+-- 클라 선택 요청
+function BuffManager.selectBuff(player)
+	local uid = player.UserId
+	if selected[uid] == nil or selected[uid] then return end
+	local def = pending[uid]
+	if def and def.id == "reroll" then
+		-- 재추첨: 새 버프 카드로 교체 (다시 선택)
+		local nd = drawNonMeta()
+		pending[uid] = nd
+		deps.network.fireTo("BuffOffer", player, { cards = { cardOf(nd) }, selectable = true, duration = GameConstants.BUFF_SELECT_TIME })
+	else
+		resolve(player)
+	end
+end
+
+function BuffManager.allSelected()
+	for uid in roster do if not selected[uid] then return false end end
+	return true
+end
+function BuffManager.autoResolveRemaining()
+	for uid in roster do
+		if not selected[uid] then
+			local p = Players:GetPlayerByUserId(uid)
+			if p then resolve(p) else selected[uid] = true end
 		end
 	end
 end
 
--- BombManager가 조회하는 배수 (없으면 기본값)
 function BuffManager.getModifiers(userId)
 	return mods[userId] or defaultMods()
 end
-
--- 반사막 소비: 발동 시 true
 function BuffManager.consumeReflect(userId): boolean
 	local o = oneshots[userId]
-	if o and o.reflect then
-		o.reflect = false
-		return true
-	end
+	if o and o.reflect then o.reflect = false; return true end
 	return false
 end
-
--- 능동 버프 사용 (Client -> Server)
 function BuffManager.useActiveBuff(player, buffId)
 	local uid = player.UserId
 	local o = oneshots[uid]
 	if not o then return end
-
 	if buffId == "blink" and (o.blink or 0) > 0 then
 		o.blink -= 1
 		local char = player.Character
@@ -137,5 +164,4 @@ function BuffManager.useActiveBuff(player, buffId)
 		deps.bomb.forcePassRandom(uid)
 	end
 end
-
 return BuffManager

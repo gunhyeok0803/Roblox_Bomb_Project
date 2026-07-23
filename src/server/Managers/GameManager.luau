@@ -11,12 +11,10 @@ local startRequested = false
 local ready: { [number]: boolean } = {}
 function GameManager.init(injected) deps = injected end
 
--- 호스트만 시작 가능
 function GameManager.requestStart(player)
 	local host = deps.players.getHost()
 	if host and player.UserId == host.UserId then startRequested = true end
 end
--- 비호스트만 Ready 토글
 function GameManager.toggleReady(player)
 	local host = deps.players.getHost()
 	if host and player.UserId == host.UserId then return end
@@ -31,7 +29,6 @@ function GameManager.start()
 	end
 
 	while true do
-		-- ===== 로비: 호스트 시작 / Ready / 자동시작 =====
 		StateManager.to(S.LOBBY)
 		startRequested = false
 		table.clear(ready)
@@ -66,7 +63,6 @@ function GameManager.start()
 				players = roster, allReady = allReady, countingDown = countingDown, secondsLeft = secondsLeft,
 			})
 
-			-- 시작 조건: 전원 Ready + (호스트 시작 or 자동시작 시간 도달)
 			if allReady and (startRequested or (autoStartAt and os.clock() >= autoStartAt)) then break end
 			task.wait(0.3)
 		end
@@ -74,20 +70,22 @@ function GameManager.start()
 		StateManager.to(S.WAITING)
 		if #deps.players.getAll() < GameConstants.MIN_PLAYERS then continue end
 
-		-- ===== 매치 =====
 		deps.players.resetScores()
 		deps.stats.reset()
 		deps.score.reset()
 
 		for round = 1, GameConstants.TOTAL_ROUNDS do
 			StateManager.to(S.ROUND_START, { round = round })
-			deps.players.respawnAll() -- 전원 부활 (폭발자 포함 → 5라운드 완주)
+			deps.players.respawnAll()
 			task.wait(1)
 			local rosterP = deps.players.getAlivePlayers()
 			deps.spawn.assignRound(rosterP)
 			deps.spawn.placeAll(rosterP)
 			if round >= GameConstants.BUFF_START_ROUND then
-				deps.buffs.grantRoundBuffs(rosterP, round)
+				deps.buffs.offerRoundBuffs(rosterP, round)
+				local t0 = os.clock()
+				repeat task.wait(0.2) until deps.buffs.allSelected() or (os.clock() - t0) >= GameConstants.BUFF_SELECT_TIME
+				deps.buffs.autoResolveRemaining()
 			end
 
 			StateManager.to(S.BOMB_SPAWN)
