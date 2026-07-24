@@ -61,8 +61,7 @@ function UIManager.init(network)
 		local p = Players:GetPlayerByUserId(userId)
 		return p and p.DisplayName or ("플레이어 " .. tostring(userId))
 	end
-	local blinkChip: any = nil
-	local blinkMax = 0
+	local oneChips: { [string]: { chip: any, max: number, name: string } } = {}  -- 오너샷 잔여횟수 칩(blink/reflect/repel)
 	local currentDanger = 0   -- TimerUpdate 위험도 캐시(비네트 렌더 루프에서 사용)
 	local iAmOwner = false    -- 내가 폭탄 보유 중이면 가장자리 상시 맥동
 
@@ -81,11 +80,21 @@ function UIManager.init(network)
 			end
 		end)
 	end
-	local function blinkLabel(rem: number): string
-		return "순간이동  [Q]  " .. tostring(rem) .. "/" .. tostring(blinkMax)
+	local function oneLabel(id, name, rem, max): string
+		return (name or id) .. (BUFF_KEY_HINT[id] or "") .. "  " .. tostring(rem) .. "/" .. tostring(max)
+	end
+	local function updateOneshot(id, rem)
+		local rec = oneChips[id]
+		if not rec then return end
+		rec.chip.ChipText.Text = oneLabel(id, rec.name, rem, rec.max)
+		if rem <= 0 then
+			local s = rec.chip:FindFirstChildOfClass("UIStroke")
+			if s then s.Color = Color3.fromRGB(120, 120, 120) end
+			rec.chip.ChipText.TextTransparency = 0.45
+		end
 	end
 	local function clearBuffChips()
-		blinkChip = nil; blinkMax = 0
+		table.clear(oneChips)
 		for _, c in ipairs(buffContainer:GetChildren()) do
 			if c:IsA("Frame") and c.Name == "BuffChip" then c:Destroy() end
 		end
@@ -93,10 +102,10 @@ function UIManager.init(network)
 	local function addBuffChip(meta)
 		local chip = chipTemplate:Clone()
 		chip.Name = "BuffChip"; chip.Visible = true
-		if meta.id == "blink" then
-			blinkMax = (meta.params and meta.params.uses) or 3
-			chip.ChipText.Text = blinkLabel(blinkMax)
-			blinkChip = chip
+		local uses = meta.params and meta.params.uses
+		if uses then
+			chip.ChipText.Text = oneLabel(meta.id, meta.name, uses, uses)
+			oneChips[meta.id] = { chip = chip, max = uses, name = meta.name or meta.id }
 		else
 			chip.ChipText.Text = (meta.name or meta.id) .. (BUFF_KEY_HINT[meta.id] or "")
 		end
@@ -282,14 +291,10 @@ function UIManager.init(network)
 			flash.BackgroundColor3 = Color3.fromRGB(255, 255, 255)   -- 폭발은 흰색(수신 붉은 플래시와 분리)
 			flash.BackgroundTransparency = 0.2
 			TweenService:Create(flash, TweenInfo.new(0.35), { BackgroundTransparency = 1 }):Play()
-		elseif effectId == "blink" and params.userId == player.UserId and blinkChip then
-			local rem = params.remaining or 0
-			blinkChip.ChipText.Text = blinkLabel(rem)
-			if rem <= 0 then
-				local s = blinkChip:FindFirstChildOfClass("UIStroke")
-				if s then s.Color = Color3.fromRGB(120, 120, 120) end
-				blinkChip.ChipText.TextTransparency = 0.45
-			end
+		elseif effectId == "blink" and params.userId == player.UserId then
+			updateOneshot("blink", params.remaining or 0)   -- blink 은 VFX 겸용 이벤트
+		elseif effectId == "buffUse" and params.userId == player.UserId then
+			updateOneshot(params.id, params.remaining or 0)  -- reflect/repel 잔여 갱신
 		end
 	end)
 

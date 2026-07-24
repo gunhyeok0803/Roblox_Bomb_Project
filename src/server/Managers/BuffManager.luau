@@ -56,9 +56,9 @@ local function applyBuff(player, def)
 		if p.homingStrength then m.homingStrength += p.homingStrength end
 		applyMovement(player)
 	elseif def.kind == "oneshot" then
-		if def.id == "blink" then oneshots[uid].blink = (oneshots[uid].blink or 0) + (p.uses or 1) end
-		if def.id == "reflect" then oneshots[uid].reflect = true end
-		if def.id == "repel" then oneshots[uid].repel = true end
+		-- 오너샷은 params.uses 로 사용 횟수 지정. 하드 캡: 이중획득으로도 최대치 초과 불가
+		local n = p.uses or 1
+		oneshots[uid][def.id] = math.max(oneshots[uid][def.id] or 0, n)
 	end
 	deps.network.broadcast("BuffGranted", uid, def.id, def)
 end
@@ -142,7 +142,11 @@ function BuffManager.getModifiers(userId)
 end
 function BuffManager.consumeReflect(userId): boolean
 	local o = oneshots[userId]
-	if o and o.reflect then o.reflect = false; return true end
+	if o and (o.reflect or 0) > 0 then
+		o.reflect -= 1
+		deps.network.broadcast("EffectTrigger", "buffUse", { userId = userId, id = "reflect", remaining = o.reflect })
+		return true
+	end
 	return false
 end
 function BuffManager.useActiveBuff(player, buffId)
@@ -160,9 +164,10 @@ function BuffManager.useActiveBuff(player, buffId)
 			deps.network.broadcast("EffectTrigger", "blink", { userId = uid, remaining = o.blink })
 			if deps.score then deps.score.award(uid, "buff") end
 		end
-	elseif buffId == "repel" and o.repel then
-		o.repel = false
+	elseif buffId == "repel" and (o.repel or 0) > 0 then
+		o.repel -= 1
 		if deps.score then deps.score.award(uid, "buff") end
+		deps.network.broadcast("EffectTrigger", "buffUse", { userId = uid, id = "repel", remaining = o.repel })
 		deps.bomb.forcePassRandom(uid)
 	end
 end
