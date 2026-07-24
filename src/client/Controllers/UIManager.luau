@@ -2,6 +2,7 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
 local Debris = game:GetService("Debris")
 
 local UIConfig = require(ReplicatedStorage.Shared.Config.UIConfig)
@@ -60,7 +61,31 @@ function UIManager.init(network)
 		local p = Players:GetPlayerByUserId(userId)
 		return p and p.DisplayName or ("플레이어 " .. tostring(userId))
 	end
+	local blinkChip: any = nil
+	local blinkMax = 0
+	local currentDanger = 0   -- TimerUpdate 위험도 캐시(비네트 렌더 루프에서 사용)
+	local iAmOwner = false    -- 내가 폭탄 보유 중이면 가장자리 상시 맥동
+
+	-- 비네트: 위험도 기반 크기 + 폭탄 보유 시 은은한 상시 맥동(압박감)
+	if vignette then
+		RunService.RenderStepped:Connect(function()
+			local t = 120 * currentDanger
+			if iAmOwner then
+				t = math.max(t, 20 + 12 * (0.5 + 0.5 * math.sin(os.clock() * 3.2)))
+			end
+			local ti = math.floor(t)
+			for _, f in ipairs(vignette:GetChildren()) do
+				if f:IsA("Frame") then
+					if f.Name == "Top" or f.Name == "Bottom" then f.Size = UDim2.new(1, 0, 0, ti) else f.Size = UDim2.new(0, ti, 1, 0) end
+				end
+			end
+		end)
+	end
+	local function blinkLabel(rem: number): string
+		return "순간이동  [Q]  " .. tostring(rem) .. "/" .. tostring(blinkMax)
+	end
 	local function clearBuffChips()
+		blinkChip = nil; blinkMax = 0
 		for _, c in ipairs(buffContainer:GetChildren()) do
 			if c:IsA("Frame") and c.Name == "BuffChip" then c:Destroy() end
 		end
@@ -68,7 +93,13 @@ function UIManager.init(network)
 	local function addBuffChip(meta)
 		local chip = chipTemplate:Clone()
 		chip.Name = "BuffChip"; chip.Visible = true
-		chip.ChipText.Text = (meta.name or meta.id) .. (BUFF_KEY_HINT[meta.id] or "")
+		if meta.id == "blink" then
+			blinkMax = (meta.params and meta.params.uses) or 3
+			chip.ChipText.Text = blinkLabel(blinkMax)
+			blinkChip = chip
+		else
+			chip.ChipText.Text = (meta.name or meta.id) .. (BUFF_KEY_HINT[meta.id] or "")
+		end
 		if meta.kind == "debuff" then
 			local s = chip:FindFirstChildOfClass("UIStroke")
 			if s then s.Color = UIConfig.DANGER_COLOR end
@@ -179,17 +210,20 @@ function UIManager.init(network)
 		local sec = data.secondsLeft or 0
 		timerLabel.Text = string.format("%d:%02d", math.floor(sec / 60), sec % 60)
 		local d = math.clamp(data.dangerLevel or 0, 0, 1)
-		timerLabel.TextColor3 = UIConfig.SAFE_COLOR:Lerp(UIConfig.DANGER_COLOR, d)
-		if vignette then
-			local t = math.floor(120 * d)
-			for _, f in ipairs(vignette:GetChildren()) do
-				if f:IsA("Frame") then
-					if f.Name == "Top" or f.Name == "Bottom" then f.Size = UDim2.new(1, 0, 0, t) else f.Size = UDim2.new(0, t, 1, 0) end
-				end
-			end
+		-- 남은 시간 임계값 기반 색상: 초록 → 주황(≤30s) → 빨강(≤10s)
+		if sec > UIConfig.TIMER_WARN_SECONDS then
+			timerLabel.TextColor3 = UIConfig.SAFE_COLOR
+		elseif sec > UIConfig.TIMER_CRIT_SECONDS then
+			timerLabel.TextColor3 = UIConfig.WARN_COLOR
+		else
+			timerLabel.TextColor3 = UIConfig.DANGER_COLOR
 		end
-		if d > 0 then
-			local pulse = 1 + 0.14 * d * (0.5 + 0.5 * math.sin(os.clock() * (4 + d * 9)))
+		currentDanger = d   -- 실제 비네트 크기는 렌더 루프에서 위험도 + 보유 맥동을 합쳐 처리
+		-- 위험도 + 임박(≤10s) 시 강한 펄스: 임박 구간은 dangerLevel과 무관하게 크게 뜀
+		local pulseAmt = d
+		if sec <= UIConfig.TIMER_CRIT_SECONDS then pulseAmt = math.max(pulseAmt, 0.9) end
+		if pulseAmt > 0 then
+			local pulse = 1 + 0.18 * pulseAmt * (0.5 + 0.5 * math.sin(os.clock() * (4 + pulseAmt * 9)))
 			timerLabel.TextSize = math.floor(30 * pulse)
 		else
 			timerLabel.TextSize = 30
@@ -197,6 +231,7 @@ function UIManager.init(network)
 	end)
 
 	network.on("BombOwnerChanged", function(ownerUserId)
+		iAmOwner = (ownerUserId == player.UserId)
 		if not ownerUserId then ownerBanner.Visible = false; return end
 		ownerBanner.Visible = true
 		if ownerUserId == player.UserId then
@@ -230,6 +265,12 @@ function UIManager.init(network)
 
 	network.on("EffectTrigger", function(effectId, params)
 		params = params or {}
+		-- 폭탄을 받은 사람 화면에 짧은 붉은 플래시(전달/밀어내기 모두)
+		if (effectId == "bombThrow" or effectId == "repel") and params.to == player.UserId and flash then
+			flash.BackgroundColor3 = Color3.fromRGB(220, 45, 45)
+			flash.BackgroundTransparency = 0.35
+			TweenService:Create(flash, TweenInfo.new(0.4), { BackgroundTransparency = 1 }):Play()
+		end
 		if effectId == "bombThrow" and params.from == player.UserId and passPopup then
 			passPopup.Visible = true; passPopup.TextTransparency = 0; passPopup.Size = UDim2.fromOffset(320, 80)
 			TweenService:Create(passPopup, TweenInfo.new(0.25, Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Size = UDim2.fromOffset(520, 80) }):Play()
@@ -238,8 +279,17 @@ function UIManager.init(network)
 				task.delay(0.3, function() passPopup.Visible = false end)
 			end)
 		elseif effectId == "explosion" and flash then
+			flash.BackgroundColor3 = Color3.fromRGB(255, 255, 255)   -- 폭발은 흰색(수신 붉은 플래시와 분리)
 			flash.BackgroundTransparency = 0.2
 			TweenService:Create(flash, TweenInfo.new(0.35), { BackgroundTransparency = 1 }):Play()
+		elseif effectId == "blink" and params.userId == player.UserId and blinkChip then
+			local rem = params.remaining or 0
+			blinkChip.ChipText.Text = blinkLabel(rem)
+			if rem <= 0 then
+				local s = blinkChip:FindFirstChildOfClass("UIStroke")
+				if s then s.Color = Color3.fromRGB(120, 120, 120) end
+				blinkChip.ChipText.TextTransparency = 0.45
+			end
 		end
 	end)
 

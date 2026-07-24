@@ -34,6 +34,8 @@ local function applyMovement(player)
 	local hum = char and char:FindFirstChildWhichIsA("Humanoid")
 	if hum and m then
 		hum.WalkSpeed = GameConfig.BASE_WALK_SPEED * m.walkSpeedMult
+		-- R15 기본은 JumpHeight 사용(UseJumpPower=false)이라 JumpPower 설정이 무시됨 → 강제로 켜서 반영
+		hum.UseJumpPower = true
 		hum.JumpPower = GameConfig.BASE_JUMP_POWER * m.jumpMult
 	end
 end
@@ -54,7 +56,7 @@ local function applyBuff(player, def)
 		if p.homingStrength then m.homingStrength += p.homingStrength end
 		applyMovement(player)
 	elseif def.kind == "oneshot" then
-		if def.id == "blink" then oneshots[uid].blink = (oneshots[uid].blink or 0) + 1 end
+		if def.id == "blink" then oneshots[uid].blink = (oneshots[uid].blink or 0) + (p.uses or 1) end
 		if def.id == "reflect" then oneshots[uid].reflect = true end
 		if def.id == "repel" then oneshots[uid].repel = true end
 	end
@@ -155,7 +157,7 @@ function BuffManager.useActiveBuff(player, buffId)
 			local def = getById("blink")
 			local dist = (def and def.params.dashStuds) or 8
 			root.CFrame = root.CFrame + root.CFrame.LookVector * dist
-			deps.network.broadcast("EffectTrigger", "blink", { userId = uid })
+			deps.network.broadcast("EffectTrigger", "blink", { userId = uid, remaining = o.blink })
 			if deps.score then deps.score.award(uid, "buff") end
 		end
 	elseif buffId == "repel" and o.repel then

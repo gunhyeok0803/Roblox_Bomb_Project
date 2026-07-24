@@ -57,8 +57,8 @@
 | --- | --- | --- | --- | --- |
 | `swift` ⚡ | 신속 | 지속 | 이동속도 ×1.30 | 자동 |
 | `strongArm` 🎯 | 강견 | 지속 | 투척 거리 ×1.45 | 자동 |
-| `highJump` ⏫ | 도약 | 지속 | 점프력 ×1.40 | 자동 |
-| `blink` ✨ | 순간이동 | 일회성 | 14 studs 대시 | **Q** |
+| `highJump` ⏫ | 도약 | 지속 | 점프력 ×1.5 | 자동 |
+| `blink` ✨ | 순간이동 | 일회성 | 16 studs 대시 · **3회** | **Q** |
 | `reflect` 🛡️ | 반사막 | 일회성 | 다음 폭탄 반사 | 자동 |
 | `repel` ✋ | 밀어내기 | 일회성 | 폭탄 즉시 넘김 | **E** |
 | `reroll` 🎲 | 재추첨 | 메타 | 선택 시 새 카드로 교체 | 즉시 |
@@ -67,6 +67,10 @@
 | `weakArm` 🔻 | 약한 팔 | 디버프 | 투척 거리 ×0.72 | 자동 |
 
 > **카드 선택 흐름:** 각 플레이어에게 랜덤 카드 1장 오퍼 → 선택. **재추첨은 선택 시 새 버프 카드로 교체**(다시 선택), **이중 획득은 선택 시 2장 나란히**. 8초 초과 시 자동 확정.
+>
+> **순간이동(blink):** 라운드당 **3회** 사용 가능. HUD 칩에 잔여 횟수 `3/3 → 2/3 → 1/3` 표시, 소진 시 칩이 회색+반투명 처리되고 자동 비활성화. 라운드 종료 시 초기화.
+>
+> **도약(highJump):** R15 캐릭터는 기본이 `JumpHeight`(=`UseJumpPower false`)라 `JumpPower` 설정이 무시됨 → `BuffManager.applyMovement`에서 `UseJumpPower=true`로 강제해 실제 반영. 값(×1.5)이 과해 벽을 넘으면 `BuffConfig`에서 `jumpMult`를 1.35~1.4로 낮출 것.
 
 ---
 
@@ -191,8 +195,10 @@ StarterPlayer/StarterPlayerScripts/Client (부트스트랩)
 | **효과음 (SoundId/볼륨)** | Studio `Assets/Sounds` 각 Sound |
 | **BGM 트랙/볼륨** | Studio `Assets/Sounds/Bgm` (SoundId·Volume·Looped) |
 | **이펙트 (색/파티클/모양)** | Studio `Assets/Effects` 프리팹 (Attribute 포함) |
-| 폭발/위험 **카메라 셰이크 세기** | `Client/EffectController` (`shakeBurst`, danger intensity) |
-| 위험 **화면 가장자리/타이머 펄스** | `Client/UIManager` (`TimerUpdate` 핸들러의 120px·pulse) |
+| 폭발/위험 **카메라 셰이크 세기** | `Client/EffectController` (`shakeBurst`, danger 제곱커브 예열) |
+| **타이머 색 임계값**(30초 주황/10초 빨강) | `Shared/Config/UIConfig` (`TIMER_WARN/CRIT_SECONDS`, `WARN_COLOR`) |
+| **화면 가장자리 비네트**(위험 + 폭탄 보유 맥동) | `Client/UIManager` (`RenderStepped` 비네트 루프) |
+| **폭탄 받을 때 붉은 화면 플래시** | `Client/UIManager` (`EffectTrigger` 수신 분기) |
 | 폭탄 3D 모델 | Studio `ServerStorage/BombTemplate` |
 
 ### 맵 / 스폰
@@ -220,7 +226,7 @@ StarterPlayer/StarterPlayerScripts/Client (부트스트랩)
 
 ## 11. 현재 상태 / 남은 것
 
-**✅ 완료:** 로비 Ready · 5라운드 루프 · 폭탄/투척/폭발 · 버프 10종 + **선택 카드 UI**(재추첨·이중획득) · 점수/MVP/보상/leaderstats/ScorePopup · DataStore(메모리 폴백) · UX 연출(라운드 인트로·위험 연출·폭발 셰이크·전달 피드백·소유자 외곽선) · **효과음 7종 + BGM** · 벽 안쪽 스폰 6곳 · 맵
+**✅ 완료:** 로비 Ready · 5라운드 루프 · 폭탄/투척/폭발 · 버프 10종 + **선택 카드 UI**(재추첨·이중획득) · **순간이동 3회+잔여 카운터** · 점수/MVP/보상/leaderstats/ScorePopup · DataStore(메모리 폴백) · UX 연출(라운드 인트로·**타이머 3단계 색/펄스**·**폭탄 보유 비네트 맥동**·**폭발 예열 셰이크**·**수신 붉은 플래시**·소유자 외곽선) · **효과음 7종 + BGM** · 벽 안쪽 스폰 6곳 · 맵
 
 **⬜ 남은 것 (2일 데모엔 선택):**
 | 항목 | 비고 |

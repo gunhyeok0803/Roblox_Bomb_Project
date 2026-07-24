@@ -90,10 +90,11 @@ local function hitFlash(userId: number)
 	local char = getCharByUserId(userId)
 	if not char then return end
 	local hl = Instance.new("Highlight")
-	hl.FillColor = Color3.fromRGB(255, 255, 255); hl.FillTransparency = 0.35
+	hl.FillColor = Color3.fromRGB(255, 235, 235); hl.FillTransparency = 0.2
+	hl.OutlineColor = Color3.fromRGB(255, 70, 70)
 	hl.OutlineTransparency = 0; hl.Adornee = char; hl.Parent = char
-	TweenService:Create(hl, TweenInfo.new(0.3), { FillTransparency = 1, OutlineTransparency = 1 }):Play()
-	Debris:AddItem(hl, 0.35)
+	TweenService:Create(hl, TweenInfo.new(0.35), { FillTransparency = 1, OutlineTransparency = 1 }):Play()
+	Debris:AddItem(hl, 0.4)
 end
 
 -- QA-03/04 카메라 셰이크 (연속 위험 + 폭발 버스트)
@@ -103,7 +104,11 @@ RunService:BindToRenderStep("BombShake", Enum.RenderPriority.Camera.Value + 1, f
 	local cam = workspace.CurrentCamera
 	if not cam then return end
 	local intensity = 0
-	if currentDanger > 0.7 then intensity += (currentDanger - 0.7) / 0.3 * 0.2 end
+	-- 폭발이 가까울수록 예열되듯 점점 강해지는 미세 셰이크(제곱 커브 → 막판에 확 뜀)
+	if currentDanger > 0.6 then
+		local k = (currentDanger - 0.6) / 0.4
+		intensity += k * k * 0.35
+	end
 	if shakeBurst > 0 then intensity += shakeBurst; shakeBurst = math.max(0, shakeBurst - dt * 4) end
 	if intensity > 0.001 then
 		local rx = (math.random() - 0.5) * intensity

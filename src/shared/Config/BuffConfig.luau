@@ -8,8 +8,8 @@ export type BuffDef = {
 BuffConfig.List = {
 	{ id="swift",      name="신속",      kind="duration", rarity="common",    weight=100, desc="이동 속도 증가",   icon="⚡", params={ walkSpeedMult=1.30 } },
 	{ id="strongArm",  name="강견",      kind="duration", rarity="common",    weight=100, desc="투척 거리 증가",   icon="🎯", params={ rangeMult=1.45 } },
-	{ id="highJump",   name="도약",      kind="duration", rarity="common",    weight=100, desc="점프력 증가",     icon="⏫", params={ jumpMult=1.40 } },
-	{ id="blink",      name="순간이동",  kind="oneshot",  rarity="uncommon",  weight=50,  desc="[Q] 짧은 순간이동", icon="✨", params={ dashStuds=14 } },
+	{ id="highJump",   name="도약",      kind="duration", rarity="common",    weight=100, desc="점프력 대폭 증가", icon="⏫", params={ jumpMult=1.5 } },
+	{ id="blink",      name="순간이동",  kind="oneshot",  rarity="uncommon",  weight=50,  desc="[Q] 순간이동 (3회)", icon="✨", params={ dashStuds=16, uses=3 } },
 	{ id="reflect",    name="반사막",    kind="oneshot",  rarity="rare",      weight=18,  desc="다음 폭탄 반사",   icon="🛡️", params={} },
 	{ id="repel",      name="밀어내기",  kind="oneshot",  rarity="rare",      weight=18,  desc="[E] 폭탄 즉시 넘김", icon="✋", params={} },
 	{ id="reroll",     name="재추첨",    kind="meta",     rarity="rare",      weight=15,  desc="버프 다시 뽑기",   icon="🎲", params={} },
