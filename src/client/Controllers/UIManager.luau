@@ -138,8 +138,9 @@ function UIManager.init(network)
 	network.on("BuffOffer", function(data)
 		if not data or not buffLayer or not buffCardTemplate then return end
 		clearBuffCards()
+		if roundIntro then roundIntro.Visible = false end   -- 카드가 뜨면 라운드 인트로와 겹치지 않게 숨김
 		buffLayer.Visible = true
-		for _, cd in ipairs(data.cards or {}) do
+		for i, cd in ipairs(data.cards or {}) do
 			local card = buffCardTemplate:Clone()
 			card.Name = "BuffCard"; card.Visible = true
 			card.Icon.Text = cd.icon or "?"
@@ -152,7 +153,8 @@ function UIManager.init(network)
 			card.TimerBar.BackgroundColor3 = col
 			if data.selectable then
 				card.SelectBtn.Visible = true; card.TimerBar.Visible = true
-				card.SelectBtn.Activated:Connect(function() network.send(RemoteNames.RequestSelectBuff) end)
+				local idx = i
+				card.SelectBtn.Activated:Connect(function() network.send(RemoteNames.RequestSelectBuff, idx) end)
 				card.TimerBar.Size = UDim2.new(1, 0, 0, 3)
 				TweenService:Create(card.TimerBar, TweenInfo.new(data.duration or 8, Enum.EasingStyle.Linear), { Size = UDim2.new(0, 0, 0, 3) }):Play()
 				card.Size = UDim2.fromOffset(180, 260)
@@ -168,7 +170,15 @@ function UIManager.init(network)
 	end)
 
 	network.on("GameStateChanged", function(stateName, payload)
-		lobbyBanner.Visible = (stateName == StateConstants.LOBBY or stateName == StateConstants.WAITING)
+		local inLobby = (stateName == StateConstants.LOBBY or stateName == StateConstants.WAITING)
+		lobbyBanner.Visible = inLobby
+		if inLobby then
+			-- 로비 복귀 시 결과/버프/관전 UI 정리(로비 배너와 겹침 방지)
+			gamePanel.Visible = false
+			roundPanel.Visible = false
+			specBanner.Visible = false
+			if buffLayer then buffLayer.Visible = false end
+		end
 		if stateName == StateConstants.ROUND_START then
 			clearBuffChips()
 			if buffLayer then buffLayer.Visible = false end
@@ -176,6 +186,10 @@ function UIManager.init(network)
 			specBanner.Visible = false
 			roundPanel.Visible = false
 			showRoundIntro(payload and payload.round)
+		elseif stateName == StateConstants.BOMB_SPAWN or stateName == StateConstants.PLAYING then
+			-- 플레이 시작 전 버프 카드 잔상 제거
+			if buffLayer then buffLayer.Visible = false end
+			clearBuffCards()
 		end
 	end)
 

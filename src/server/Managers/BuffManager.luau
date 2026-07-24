@@ -70,6 +70,16 @@ local function drawNonMeta()
 	for _ = 1, 20 do local d = draw(); if d.kind ~= "meta" then return d end end
 	return getById("swift")
 end
+-- 서로 다른 버프 n장 (카드 3장 오퍼용)
+local function drawDistinct(n)
+	local out, seen = {}, {}
+	for _ = 1, 200 do
+		if #out >= n then break end
+		local d = drawNonMeta()
+		if not seen[d.id] then seen[d.id] = true; out[#out + 1] = d end
+	end
+	return out
+end
 local function cardOf(def)
 	return { id = def.id, name = def.name, desc = def.desc, icon = def.icon, kind = def.kind }
 end
@@ -79,15 +89,17 @@ function BuffManager.resetRound()
 	table.clear(pending); table.clear(selected); table.clear(roster)
 end
 
--- 라운드 시작: 각 플레이어에게 카드 1장 오퍼 (선택 대기)
+-- 라운드 시작: 각 플레이어에게 서로 다른 카드 3장 오퍼 (하나 선택)
 function BuffManager.offerRoundBuffs(players, round)
 	BuffManager.resetRound()
 	for _, p in players do
 		roster[p.UserId] = true
 		selected[p.UserId] = false
-		local def = draw()
-		pending[p.UserId] = def
-		deps.network.fireTo("BuffOffer", p, { cards = { cardOf(def) }, selectable = true, duration = GameConstants.BUFF_SELECT_TIME })
+		local defs = drawDistinct(3)
+		pending[p.UserId] = defs
+		local cards = {}
+		for i, d in ipairs(defs) do cards[i] = cardOf(d) end
+		deps.network.fireTo("BuffOffer", p, { cards = cards, selectable = true, duration = GameConstants.BUFF_SELECT_TIME })
 	end
 end
 
@@ -95,33 +107,21 @@ local function finish(player, cards)
 	selected[player.UserId] = true
 	deps.network.fireTo("BuffOffer", player, { cards = cards, selectable = false, done = true })
 end
--- pending 을 최종 적용
-local function resolve(player)
-	local def = pending[player.UserId]
+-- 3장 중 선택한 카드(index) 적용
+local function applyChoice(player, index)
+	local defs = pending[player.UserId]
+	if not defs then return end
+	local def = defs[tonumber(index) or 1] or defs[1]
 	if not def then return end
-	if def.id == "reroll" then
-		local nd = drawNonMeta(); applyBuff(player, nd); finish(player, { cardOf(nd) })
-	elseif def.id == "doubleDraw" then
-		local a, b = drawNonMeta(), drawNonMeta()
-		applyBuff(player, a); applyBuff(player, b); finish(player, { cardOf(a), cardOf(b) })
-	else
-		applyBuff(player, def); finish(player, { cardOf(def) })
-	end
+	applyBuff(player, def)
+	finish(player, { cardOf(def) })
 end
 
--- 클라 선택 요청
-function BuffManager.selectBuff(player)
+-- 클라 선택 요청 (선택한 카드 인덱스)
+function BuffManager.selectBuff(player, index)
 	local uid = player.UserId
 	if selected[uid] == nil or selected[uid] then return end
-	local def = pending[uid]
-	if def and def.id == "reroll" then
-		-- 재추첨: 새 버프 카드로 교체 (다시 선택)
-		local nd = drawNonMeta()
-		pending[uid] = nd
-		deps.network.fireTo("BuffOffer", player, { cards = { cardOf(nd) }, selectable = true, duration = GameConstants.BUFF_SELECT_TIME })
-	else
-		resolve(player)
-	end
+	applyChoice(player, index)
 end
 
 function BuffManager.allSelected()
@@ -132,7 +132,12 @@ function BuffManager.autoResolveRemaining()
 	for uid in roster do
 		if not selected[uid] then
 			local p = Players:GetPlayerByUserId(uid)
-			if p then resolve(p) else selected[uid] = true end
+			if p then
+				local defs = pending[uid]
+				applyChoice(p, defs and math.random(1, #defs) or 1)
+			else
+				selected[uid] = true
+			end
 		end
 	end
 end
