@@ -85,7 +85,7 @@ function BombManager._findTarget(thrower: Player, origin: Vector3, dir: Vector3,
 					local dist = (pRoot.Position - closest).Magnitude
 					local targetMod = deps.buffs.getModifiers(p.UserId)
 					local effRadius = BombConfig.HIT_RADIUS * hitRadiusMult * targetMod.targetRadiusMult
-					if dist <= effRadius and not BombManager._blocked(origin, pRoot.Position, { thrower.Character, char }) then
+					if dist <= effRadius and not BombManager._blocked(origin, pRoot.Position, { thrower.Character, char, bombInstance }) then
 						if not bestProj or proj < bestProj then best, bestProj = p, proj end
 					end
 				end
@@ -95,17 +95,20 @@ function BombManager._findTarget(thrower: Player, origin: Vector3, dir: Vector3,
 	return best
 end
 
-function BombManager.onThrowRequest(player: Player, aimDirection: Vector3)
+function BombManager.onThrowRequest(player: Player, aimPoint: Vector3)
 	if bombState.ownerUserId ~= player.UserId then return end
 	local now = os.clock()
 	local mod = deps.buffs.getModifiers(player.UserId)
 	local cooldown = BombConfig.THROW_COOLDOWN * mod.cooldownMult
 	if now - bombState.lastThrowAt < cooldown then return end
-	if typeof(aimDirection) ~= "Vector3" or aimDirection.Magnitude < 0.1 then return end
-	local dir = aimDirection.Unit
+	if typeof(aimPoint) ~= "Vector3" then return end
 	local character = player.Character
 	local root = character and character:FindFirstChild("HumanoidRootPart")
 	if not root then return end
+	-- 방향을 카메라가 아니라 "몸통 → 클릭 지점"으로 계산 (시차 제거)
+	local toPoint = aimPoint - root.Position
+	if toPoint.Magnitude < 0.1 then return end
+	local dir = toPoint.Unit
 	bombState.lastThrowAt = now
 
 	local range = BombConfig.THROW_RANGE * mod.rangeMult

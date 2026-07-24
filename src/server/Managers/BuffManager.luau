@@ -67,7 +67,8 @@ local function draw()
 	return Util.weightedPick(BuffConfig.List, function(b) return b.weight end, RandomService:raw())
 end
 local function drawNonMeta()
-	for _ = 1, 20 do local d = draw(); if d.kind ~= "meta" then return d end end
+	-- 오퍼 가능한 버프만: 메타(재추첨/이중획득) 제외 + 디버프(둔화/약한팔) 제외
+	for _ = 1, 20 do local d = draw(); if d.kind ~= "meta" and d.kind ~= "debuff" then return d end end
 	return getById("swift")
 end
 -- 서로 다른 버프 n장 (카드 3장 오퍼용)

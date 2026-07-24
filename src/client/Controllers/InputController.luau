@@ -20,11 +20,9 @@ function InputController.init(net)
 		-- 투척: 좌클릭 / 터치
 		if input.UserInputType == Enum.UserInputType.MouseButton1
 			or input.UserInputType == Enum.UserInputType.Touch then
-			local cam = workspace.CurrentCamera
-			if not cam then return end
 			local mouse = Players.LocalPlayer:GetMouse()
-			local aimDir = (mouse.Hit.Position - cam.CFrame.Position)
-			network.send(RemoteNames.RequestThrowBomb, aimDir) -- 방향만 전송, 판정은 서버
+			local aimPoint = mouse.Hit.Position   -- 클릭한 월드 지점(방향은 서버가 몸통 기준으로 계산 → 시차 제거)
+			network.send(RemoteNames.RequestThrowBomb, aimPoint)
 			return
 		end
 		-- 능동 버프 사용
