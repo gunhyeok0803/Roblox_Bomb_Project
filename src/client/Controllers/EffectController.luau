@@ -7,6 +7,7 @@ local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local UIConfig = require(ReplicatedStorage.Shared.Config.UIConfig)
+local StateConstants = require(ReplicatedStorage.Shared.Constants.StateConstants)
 
 local EffectController = {}
 local effectsFolder: Folder
@@ -119,6 +120,14 @@ end)
 
 function EffectController.init(network)
 	effectsFolder = ReplicatedStorage.Shared.Assets:WaitForChild("Effects")
+
+	-- 플레이 외 상태에서는 위험도 셰이크/소유자 외곽선 잔상 제거 (폭발 후 결과·버프 화면까지 흔들리는 것 방지)
+	network.on("GameStateChanged", function(stateName)
+		if stateName ~= StateConstants.PLAYING then
+			currentDanger = 0
+			markOwner(nil)
+		end
+	end)
 
 	network.on("TimerUpdate", function(data)
 		local hl = ensureGlow()

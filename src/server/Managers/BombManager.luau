@@ -160,6 +160,7 @@ function BombManager.explode(): number?
 	bombState.ownerUserId = nil
 	bombState.ownerSince = 0
 	detachBomb()
+	deps.network.broadcast("BombOwnerChanged", nil, victim)  -- 폭발로 소유자 해제 알림(배너/외곽선/비네트 정리)
 	if victim then
 		deps.network.broadcast("EffectTrigger", "explosion", { userId = victim })
 	end

@@ -172,6 +172,10 @@ function UIManager.init(network)
 	network.on("GameStateChanged", function(stateName, payload)
 		local inLobby = (stateName == StateConstants.LOBBY or stateName == StateConstants.WAITING)
 		lobbyBanner.Visible = inLobby
+		if stateName ~= StateConstants.PLAYING then
+			currentDanger = 0   -- 폭발 후 비네트/타이머 위험 연출 잔상 제거
+			iAmOwner = false
+		end
 		if inLobby then
 			-- 로비 복귀 시 결과/버프/관전 UI 정리(로비 배너와 겹침 방지)
 			gamePanel.Visible = false
